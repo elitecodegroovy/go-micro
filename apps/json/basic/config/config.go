@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/elitecodegroovy/goutil"
 	"github.com/micro/go-micro/v2/config"
 	"github.com/micro/go-micro/v2/config/encoder/yaml"
 	"github.com/micro/go-micro/v2/config/source"
@@ -27,8 +28,9 @@ type Configurator interface {
 
 // configurator 配置器
 type configurator struct {
-	conf    config.Config
-	appName string
+	conf                config.Config
+	appName             string
+	showChangedFileInfo bool
 }
 
 // Init 初始化配置
@@ -87,6 +89,30 @@ func (c *configurator) init(ops Options) (err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	go func() {
+
+		log.Logf("[init] 侦听配置变动 ...")
+
+		// 开始侦听变动事件
+		watcher, err := c.conf.Watch()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for {
+			v, err := watcher.Next()
+			if err != nil {
+				log.Fatal(err)
+			}
+			if c.showChangedFileInfo {
+				log.Logf("[init] 侦听配置变动:  %s", string(v.Bytes()))
+			} else {
+				log.Logf("[init] 侦听配置变动: @time: %s", goutil.GetCurrentTimeISOStrTime())
+			}
+
+		}
+	}()
 	// 标记已经初始化
 	inited = true
 	return
@@ -96,11 +122,15 @@ func SetAppName(appName string) {
 	c.appName = appName
 }
 
+func SetShowChangeFileInfo(changed bool) {
+	c.showChangedFileInfo = changed
+}
+
 func LoadConfigurationFile(configurationFileNames []string) {
 	encode := yaml.NewEncoder()
-	for _, app := range configurationFileNames {
+	for _, appFileName := range configurationFileNames {
 		if err := c.conf.Load(file.NewSource(
-			file.WithPath("/home/app/goapp/src/github.com/elitecodegroovy/gnetwork/apps/micro/rpc5/auth/conf/"+app+".yml"),
+			file.WithPath("./apps/json/conf/"+appFileName),
 			source.WithEncoder(encode),
 		)); err != nil {
 			log.Fatal("[loadAndWatchConfigFile] 加载应用配置文件 异常，%s", zap.String("err:", err.Error()))
